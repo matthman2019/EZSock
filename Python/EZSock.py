@@ -5,11 +5,13 @@ from logging import debug, info, warning, error
 import threading
 from typing import Callable
 import json
+import struct
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 
 BROADCASTPORT = 56767
+BROADCASTIP = "239.67.76.67"
 PORT = 26767
 # Mega thanks to gemini for the following 3 functions!
 
@@ -33,7 +35,7 @@ def get_local_ip():
         if s:
             s.close()
 
-def server_broadcast_daemon(ip : str = "0.0.0.0", port : int=12345): 
+def server_broadcast_daemon(ip : str = "192.168.0.255", port : int=PORT): 
     """
     Code taken from Gemini.
     This function is a daemon for a server. It UDP broadcasts its ip and port.
@@ -42,13 +44,16 @@ def server_broadcast_daemon(ip : str = "0.0.0.0", port : int=12345):
     MESSAGE = f"EZSOCK SERVER {ip} {port}".encode()
 
     # Create a UDP socket
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    MULTICAST_TTL = 5
 
     # Enable broadcasting mode
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, MULTICAST_TTL)
 
     while True:
-        sock.sendto(MESSAGE, ('<broadcast>', BROADCASTPORT))
+        debug(f"Sending on {BROADCASTIP}, {BROADCASTPORT}")
+        sock.sendto(MESSAGE, (BROADCASTIP, BROADCASTPORT))
         debug(f"Message sent: {MESSAGE!r}")
         time.sleep(1)
 
@@ -61,11 +66,15 @@ def get_address_from_broadcast(timeout = 10):
     global BROADCASTPORT
 
     # Create a UDP socket
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.settimeout(timeout)
 
     # Bind to the port
     sock.bind((UDP_IP, BROADCASTPORT))
+
+    # thanks to stackoverflow
+    mreq = struct.pack("4sl", socket.inet_aton(), socket.INADDR_ANY)
 
     debug(f"Listening for UDP packets on port {BROADCASTPORT}")
     try:
