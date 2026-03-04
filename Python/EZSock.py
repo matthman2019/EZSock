@@ -5,6 +5,7 @@ from logging import debug, info, warning, error
 import threading
 from typing import Callable
 import json
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 
@@ -33,7 +34,7 @@ def get_local_ip():
         if s:
             s.close()
 
-def server_broadcast_daemon(ip : str = "0.0.0.0", port : int=12345): 
+def server_broadcast_daemon(ip : str = "192.168.1.255", port : int=BROADCASTPORT): 
     """
     Code taken from Gemini.
     This function is a daemon for a server. It UDP broadcasts its ip and port.
@@ -79,6 +80,45 @@ def get_address_from_broadcast(timeout = 10):
     port = int(data.split()[3])
     return (ip, port)
 
+def get_address_from_file():
+    """
+    Looks for .connection files in the parent folder.
+    It uses the first file it finds, searching the parent folder first then doing a depth first search.
+    """
+    parentFolder = Path(__file__).parent
+    connectionFile = None
+    def parseFolder(folder : Path):
+        for item in folder.iterdir():
+            assert isinstance(item, Path)
+            if item.is_dir():
+                continue
+            if item.suffix.lstrip(".") == ".connection":
+                return item
+        for item in folder.iterdir():
+            if not item.is_dir():
+                continue
+            returnVal = parseFolder(item)
+            if returnVal:
+                return returnVal
+
+    if not connectionFile:
+        warning("Could not find .connect file!")
+        return
+
+    connectionFile = parseFolder(parentFolder)
+    address = ""
+    port = 0
+    with open(connectionFile, 'r') as file:
+        for line in file:
+            line = line.rstrip('\n')
+            lineList = list(map(lambda x: x.strip(), line.split("|")))
+            if lineList[0] == "addr":
+                address = lineList[1]
+            if lineList[0] == "port":
+                port = int(lineList[1])
+    return (address, port)
+
+
 # functions to help send and receive json data easily
 def send_on_socket(sock : socket.socket, data : dict):
     """Sends a dictionary over a socket. It encodes the dictionary as utf-8 json."""
@@ -122,7 +162,7 @@ class Server:
 
     def run(self):
         # start udp broadcast daemon
-        self.broadcast_thread = threading.Thread(target=server_broadcast_daemon, args=[*self.addr])
+        self.broadcast_thread = threading.Thread(target=server_broadcast_daemon)
         self.broadcast_thread.start()
 
         # set up server
@@ -164,8 +204,18 @@ class Client:
         self.connect_callback : Callable[[socket.socket, tuple[str, int]], None] = connect_callback
 
     def find_server(self, timeout=5):
-        """The client will find the server using the server's UDP broadcasts."""
-        self.addr = get_address_from_broadcast(timeout=timeout)
+        """The client will find the server using .connect files or UDP broadcasts."""
+        connectReturn = get_address_from_file()
+        if connectReturn:
+            self.addr = connectReturn
+            debug("Successfully found .connect file!")
+            return
+        broadcastReturn = get_address_from_broadcast(timeout=timeout)
+        if broadcastReturn:
+            self.addr = broadcastReturn
+            debug("Successfully received UDP broadcasts!")
+            return
+        raise Exception("Could not find .connect file or UDP broadcasts!")
 
     def run(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -179,7 +229,25 @@ class Client:
         self.thread = threading.Thread(target=self.run)
         self.thread.start()
 
-        
+
+def create_connection_file(ip : str, port : int):
+    with open("target.connect", "w") as file:
+        file.write(f"addr|{ip}\nport|{port}\n")
+
+def main():
+    choice = input("Hello! Would you like to create a .connect file? y/n\n").lower()
+    if choice == "y":
+        ipChoice = input("What IP should I use?\n").strip()
+        portChoice = input(f"What port should I use? If you want to use the default port ({PORT}), type d.\n").strip().lower()
+        if portChoice == "d":
+            portChoice = PORT
+        else:
+            portChoice = int(portChoice)
+        create_connection_file(ipChoice, portChoice)
+
+if __name__ == "__main__":
+    main()
+
 
 
 
