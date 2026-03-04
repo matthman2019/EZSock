@@ -92,7 +92,7 @@ def get_address_from_file():
             assert isinstance(item, Path)
             if item.is_dir():
                 continue
-            if item.suffix.lstrip(".") == ".connection":
+            if item.suffix.lstrip(".") == "connect":
                 return item
         for item in folder.iterdir():
             if not item.is_dir():
@@ -100,6 +100,7 @@ def get_address_from_file():
             returnVal = parseFolder(item)
             if returnVal:
                 return returnVal
+    connectionFile = parseFolder(parentFolder)
 
     if not connectionFile:
         warning("Could not find .connect file!")
