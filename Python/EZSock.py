@@ -204,14 +204,14 @@ class Client:
         self.reuse_addr : bool = reuse_addr
         self.connect_callback : Callable[[socket.socket, tuple[str, int]], None] = connect_callback
 
-    def find_server(self, timeout=5):
+    def find_server(self):
         """The client will find the server using .connect files or UDP broadcasts."""
         connectReturn = get_address_from_file()
         if connectReturn:
             self.addr = connectReturn
             debug("Successfully found .connect file!")
             return
-        broadcastReturn = get_address_from_broadcast(timeout=timeout)
+        broadcastReturn = get_address_from_broadcast(timeout=self.timeout)
         if broadcastReturn:
             self.addr = broadcastReturn
             debug("Successfully received UDP broadcasts!")
