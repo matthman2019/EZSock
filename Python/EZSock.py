@@ -37,7 +37,7 @@ def get_local_ip():
         if s:
             s.close()
 
-def server_broadcast_daemon(ip : str = "192.168.1.255", port : int=MCAST_PORT): 
+def server_broadcast_daemon(ip : str = "192.168.1.255", port:int = PORT): 
     """
     Code taken from Gemini, modified by me to make multicasting work.
     This function is a daemon for a server. It UDP broadcasts its ip and port.
@@ -55,7 +55,7 @@ def server_broadcast_daemon(ip : str = "192.168.1.255", port : int=MCAST_PORT):
 
 def get_address_from_broadcast(timeout = 10):
     """
-    Code taken from gemini.
+    Code taken from gemini, modified to work with multicast.
     Listens for UDP broadcasts to get address.
     """
     global MCAST_PORT, MCAST_GRP
@@ -203,7 +203,7 @@ class Client:
             connect_callback = lambda server, _: (warning("Connected successfully, but you need to define connect_callback in Client!"), server.close())
         self.addr : tuple[str, int] = addr
         self.timeout : int = timeout
-        self.socket : socket.socket = None
+        self.socket : socket.socket | None = None
         self.reuse_addr : bool = reuse_addr
         self.connect_callback : Callable[[socket.socket, tuple[str, int]], None] = connect_callback
 
