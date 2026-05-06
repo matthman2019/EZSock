@@ -6,13 +6,16 @@ import threading
 from typing import Callable
 import json
 from pathlib import Path
+import struct
 
 logging.basicConfig(level=logging.INFO)
 
-
-BROADCASTPORT = 56767
+MCAST_GRP = "224.1.1.1"
+MCAST_PORT = 56767
+MULTICAST_TLL = 9
 PORT = 26767
 # Mega thanks to gemini for the following 3 functions!
+# also thanks to https://stackoverflow.com/questions/603852/how-do-you-udp-multicast-in-python for multicasting help!
 
 def get_local_ip():
     """
@@ -34,22 +37,19 @@ def get_local_ip():
         if s:
             s.close()
 
-def server_broadcast_daemon(ip : str = "192.168.1.255", port : int=BROADCASTPORT): 
+def server_broadcast_daemon(ip : str = "192.168.1.255", port : int=MCAST_PORT): 
     """
-    Code taken from Gemini.
+    Code taken from Gemini, modified by me to make multicasting work.
     This function is a daemon for a server. It UDP broadcasts its ip and port.
     """
-    global BROADCASTPORT
+    global MCAST_PORT, MCAST_GRP
     MESSAGE = f"EZSOCK SERVER {ip} {port}".encode()
 
     # Create a UDP socket
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    # Enable broadcasting mode
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 
     while True:
-        sock.sendto(MESSAGE, ('<broadcast>', BROADCASTPORT))
+        sock.sendto(MESSAGE, (MCAST_GRP, MCAST_PORT))
         debug(f"Message sent: {MESSAGE!r}")
         time.sleep(1)
 
@@ -58,22 +58,25 @@ def get_address_from_broadcast(timeout = 10):
     Code taken from gemini.
     Listens for UDP broadcasts to get address.
     """
-    UDP_IP = "0.0.0.0"  # Listen on all available interfaces
-    global BROADCASTPORT
+    global MCAST_PORT, MCAST_GRP
 
     # Create a UDP socket
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.settimeout(timeout)
 
     # Bind to the port
-    sock.bind((UDP_IP, BROADCASTPORT))
+    sock.bind((MCAST_GRP, MCAST_PORT))
+    # register multicast group
+    mreq = struct.pack("4sl", socket.inet_aton(MCAST_GRP), socket.INADDR_ANY)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
-    debug(f"Listening for UDP packets on port {BROADCASTPORT}")
+    debug(f"Listening for UDP packets on port {MCAST_PORT}")
     try:
         data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
         debug(f"Received message: {data!r} from {addr}")
     except TimeoutError:
-        error(f"Timed out! Received no UDP broadcasts on port {BROADCASTPORT}.")
+        error(f"Timed out! Received no UDP broadcasts on port {MCAST_PORT}.")
         return
      
     ip = addr[0]
